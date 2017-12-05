@@ -1,6 +1,12 @@
 var canvas = document.getElementById('canvas');
 paper.setup(canvas);
 
+let goToSurvey = ()=> {
+    window.location.pathname = 'candies/redirection.html'
+}
+
+setTimeout(goToSurvey, 10000)
+
 let parameters = {
     spaceBetweenPoints: 165,
     randomOffset: 0,
