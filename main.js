@@ -2,14 +2,11 @@ var canvas = document.getElementById('canvas');
 paper.setup(canvas);
 
 let parameters = {
-	maxRadius: 50,
-	minRadius: 10,
-    spaceBetweenPoints: 125,
-    circleRadius: 30,
-    randomOffset: 25,
-    sideOffset: 50,
-    highlightWidth: 7,
-    marginX: 75
+    spaceBetweenPoints: 165,
+    randomOffset: 0,
+    sideOffset: 120,
+    marginX: 50,
+    stepOnCurveLength: 30
 };
 
 let blue = new paper.Color('#3c91e6')
@@ -30,96 +27,98 @@ let highlightColor = pink.clone();
 highlightColor.lightness -= 0.1;
 
 var path = new paper.Path();
-path.strokeWidth = 1;
-path.strokeColor = '#ccccc';
-// path.strokeCap = 'round';
-// path.selected = true;
+path.strokeWidth = 60;
+path.strokeColor = blue;
+path.strokeCap = 'round';
+// path.add(paper.view.bounds.leftCenter.add(-parameters.marginX, 0));
 path.add(paper.view.bounds.leftCenter);
-path.add(paper.view.bounds.rightCenter);
 
+let nPoints = Math.floor(paper.view.bounds.width / parameters.spaceBetweenPoints)
+let spaceBetweenPoints = paper.view.bounds.width / nPoints
 
-let circles = [];
-
-let width = paper.view.bounds.width - 2 * parameters.marginX
-let nCircles = Math.floor(width / parameters.spaceBetweenPoints)
-let spaceBetweenPoints = width / nCircles
-
-let firstCircle = paper.Path.Circle(new paper.Point(parameters.marginX, paper.view.bounds.center.y - parameters.sideOffset).add(paper.Point.random().subtract(0.5).multiply(parameters.randomOffset)), parameters.circleRadius);
-firstCircle.fillColor = lightGreen;
-circles.push(firstCircle);
-
-for(let i=0 ; i < nCircles ; i++) {
+for(let i=1 ; i < nPoints ; i++) {
     let direction = i % 2 == 0 ? 1 : -1;
-    let circle = paper.Path.Circle(new paper.Point(parameters.marginX + i * spaceBetweenPoints, paper.view.bounds.center.y + parameters.sideOffset * direction).add(paper.Point.random().subtract(0.5).multiply(parameters.randomOffset)), parameters.circleRadius);
-    circle.fillColor = i==0 ? lightGreen : i==nCircles-1 ? lightPink : i%2 ? blue : yellow;
-    circles.push(circle);
+    let alpha = i / (nPoints-1);
+    let amplitude = 2 * (1 - Math.abs(alpha-0.5));
+    path.add(new paper.Point(i * spaceBetweenPoints, paper.view.bounds.center.y + parameters.sideOffset * direction * amplitude).add(new paper.Point(1, amplitude * Math.random()).subtract(0.5).multiply(parameters.randomOffset)))
 }
 
-let direction = nCircles % 2 == 0 ? 1 : -1;
-let lastCircle = paper.Path.Circle(new paper.Point(parameters.marginX + (nCircles - 1)  * spaceBetweenPoints, paper.view.bounds.center.y + parameters.sideOffset * direction).add(paper.Point.random().subtract(0.5).multiply(parameters.randomOffset)), parameters.circleRadius);
-lastCircle.fillColor = lightPink;
-circles.push(lastCircle);
+path.add(paper.view.bounds.rightCenter)
+// path.add(paper.view.bounds.rightCenter.add(parameters.marginX, 0));
+path.smooth({ type: 'geometric', factor: 0.5 })
+path.firstSegment.handleOut = new paper.Point(2*parameters.marginX, 0)
+path.lastSegment.handleIn = new paper.Point(-2*parameters.marginX, 0)
+// path.fullySelected = true
 
-let nPoints = 0;
+for(let segment of path.segments) {
+    segment.handleIn.y = 0
+    segment.handleOut.y = 0
+}
 
-let circleIndex = 0;
-circles[circleIndex].strokeColor = highlightColor;
-circles[circleIndex].strokeWidth = parameters.highlightWidth;
-circleIndex = 1;
-circles[circleIndex].strokeColor = highlightColor;
-circles[circleIndex].strokeWidth = parameters.highlightWidth;
-let state = 'playing';
+let circles = []
+let offset = 0
+let dragging = false
+let circleIndex = 0
 
-paper.view.onClick = function(event) {
-    if(state == 'playing') {
-        if(circleIndex == 1) {
-            circles[0].strokeColor = null;
-            circles[0].strokeWidth = 0;
-        }
-        circles[circleIndex].strokeColor = null;
-        circles[circleIndex].strokeWidth = 0;
-        
-        if(circles[circleIndex].hitTest(event.point) || 
-            circleIndex == 1 && circles[0].hitTest(event.point) || 
-            circleIndex == nCircles && circles[circles.length - 1].hitTest(event.point) ) {
-            circles[circleIndex].fillColor = green;
-            nPoints++;
-        } else {
-            circles[circleIndex].fillColor = pink;
-        }
+let donePath = new paper.Path()
+donePath.strokeWidth = path.strokeWidth / 2
+donePath.strokeColor = green
+donePath.strokeCap = 'round'
+// donePath.fullySelected = true
+donePath.add(path.firstSegment)
 
-        circleIndex++;
-        if(circleIndex == circles.length - 1) {
-            circles[circles.length - 1].strokeColor = null;
-            circles[circles.length - 1].strokeWidth = 0;
-            state = 'win';
-            var text = new paper.PointText(paper.view.center);
-            text.justification = 'center';
-            text.fillColor = 'black';
-            text.fontSize = 30;
-            text.content = 'You win !\nScore : ' + nPoints + ' / ' + nCircles;
-            let background = new paper.Path.Rectangle(text.bounds.expand(40), 10);
-            background.fillColor = new paper.Color(1, 1, 1, 0.75);
-            text.moveAbove(background);
-            return;
-        }
-        
-        circles[circleIndex].strokeColor = highlightColor;
-        circles[circleIndex].strokeWidth = parameters.highlightWidth;
-        
-        if(circleIndex == nCircles) {
-            circles[circles.length - 1].strokeColor = highlightColor;
-            circles[circles.length - 1].strokeWidth = parameters.highlightWidth;
+let n = 0
+while(offset < path.length) {
+    let point = path.getPointAt(offset)
+    let circle = new paper.Path.Circle(point, path.strokeWidth / 2 - 10)
+    circle.fillColor = path.strokeColor
+    circle.fillColor.alpha = 0.1
+    let ci = n+1
+    circle.onMouseEnter = function(event) {
+        console.log(ci, circleIndex)
+        if(dragging && ci > circleIndex) {
+            let wrongPath = new paper.Path()
+            wrongPath.strokeWidth = path.strokeWidth / 2
+            wrongPath.strokeColor = pink
+            for(let i = circleIndex ; i<ci ; i++) {
+                // circles[i].fillColor = pink
+                wrongPath.add(circles[i].position)
+                donePath.add(circles[i].position)
+            }
+            // circle.fillColor = green
+            circleIndex = ci
+            donePath.add(circle.position)
+            // donePath.smooth({ type: 'geometric', factor: 0.5 })
         }
     }
+    circles.push(circle)
+    offset += parameters.stepOnCurveLength
+    n++
+}
+
+donePath.bringToFront()
+
+circles[0].onMouseDown = function(event) {
+    dragging = true
+}
+circles[0].fillColor = green
+circles[0].bringToFront()
+
+let background = new paper.Path.Rectangle(paper.view.bounds)
+background.fillColor = 'white'
+background.sendToBack()
+
+
+paper.view.onMouseDown = function(event) {
+    
+}
+
+paper.view.onMouseMove = function(event) {
+    
 }
 
 paper.view.onFrame = function(event) {
-    if(state == 'win') {
-        for(let i=0 ; i < circles.length ; i++) {
-            circles[i].fillColor = new paper.Color(Math.random(), Math.random(), Math.random());
-        }
-    }
+    
 }
 
 window.onresize = function (event) {
